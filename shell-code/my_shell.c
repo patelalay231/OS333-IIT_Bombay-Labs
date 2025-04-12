@@ -85,9 +85,70 @@ void terminate_background_processes(pid_t *background_pids, int bg_count)
     }
 }
 
+void execute_pipe(char **tokens) {
+    int i = 0;
+    // Find the pipe
+    while (tokens[i] != NULL && strcmp(tokens[i], "|") != 0) {
+        i++;
+    }
+
+    if (tokens[i] == NULL) {
+        fprintf(stderr, "Invalid pipe syntax\n");
+        return;
+    }
+
+    tokens[i] = NULL;  // Split the command into two halves
+
+    char **cmd1 = tokens;       // First command
+    char **cmd2 = &tokens[i+1]; // Second command
+
+    int pipefd[2];
+    if (pipe(pipefd) == -1) {
+        perror("pipe");
+        return;
+    }
+
+    pid_t pid1 = fork();
+    if (pid1 == 0) {
+        // First child: writer
+        dup2(pipefd[1], STDOUT_FILENO);  // Replace stdout with pipe write
+        close(pipefd[0]);  // Close unused read end
+        close(pipefd[1]);  // Already duplicated
+        execvp(cmd1[0], cmd1);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    }
+
+    pid_t pid2 = fork();
+    if (pid2 == 0) {
+        // Second child: reader
+        dup2(pipefd[0], STDIN_FILENO);  // Replace stdin with pipe read
+        close(pipefd[1]);  // Close unused write end
+        close(pipefd[0]);  // Already duplicated
+        execvp(cmd2[0], cmd2);
+        perror("execvp");
+        exit(EXIT_FAILURE);
+    }
+
+    // Parent process
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    // Wait for both children
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
+}
+
+
 // Handle forground process execution
 void forground_process(char **tokens)
 {
+    for (int i = 0; tokens[i] != NULL; i++) {
+        if (strcmp(tokens[i], "|") == 0) {
+            execute_pipe(tokens);
+            return;
+        }
+    }
     if (strcmp(tokens[0], "cd") == 0) {
         cd(tokens);
 		return;
@@ -229,6 +290,8 @@ void parallel_process(char **tokens) {
         waitpid(parallel_pids[i], NULL, 0);  // Wait for each process to terminate
     }
 }
+
+
 
 int main(int argc, char* argv[]) {
 	char  line[MAX_INPUT_SIZE];            
