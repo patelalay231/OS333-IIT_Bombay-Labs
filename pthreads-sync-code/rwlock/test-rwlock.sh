@@ -50,7 +50,7 @@ fi
 
 echo "CASE3: Writer Preference with 5 reader and 5 writer"
 total=$((total+1))
-out=`./rwlock-writer-pref 5 5`
+out=`./rwlock-writer-pref 500 500`
 echo $out
 if [ "$out" = "PASSED" ]; then
     correct=$((correct+1))
